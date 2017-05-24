@@ -84,5 +84,13 @@
   "review": {
     "dataSource": "neo4j",
     "public": true
+  },
+  "comment": {
+    "dataSource": "neo4j",
+    "public": true
+  },
+  "reply": {
+    "dataSource": "neo4j",
+    "public": true
   }
 }
