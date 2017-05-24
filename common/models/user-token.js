@@ -69,7 +69,7 @@ module.exports = function(Usertoken) {
     };
 
     /**
-     * Validate the token.
+     * Validate The Token.
      *
      * @callback {Function} callback
      * @param {Error} err
