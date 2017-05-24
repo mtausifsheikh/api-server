@@ -1,5 +1,6 @@
 {
-  "name": "review",
+  "name": "reply",
+  "plural": "replies",
   "base": "PersistedModel",
   "idInjection": true,
   "options": {
@@ -7,16 +8,24 @@
   },
   "properties": {
     "description": {
-      "type": "string"
+      "type": "string",
+      "required": true
     },
-    "like": {
-      "type": "boolean"
+    "addedBy": {
+      "type": "string",
+      "required": true
     },
     "created": {
       "type": "date"
     },
     "modified": {
       "type": "date"
+    },
+    "commentId": {
+      "type": "string"
+    },
+    "replyId": {
+      "type": "string"
     }
   },
   "validations": [],

@@ -415,7 +415,160 @@ module.exports = function (Collection) {
         });
     };
 
-    // TODO: Define remote methods for participants, contents, topics and billing
+    Collection.addNewComment = function (data, id, cb) {
+        
+        console.log("Creating new comment instance");
+
+        var comment = {
+            description: data.description,
+            addedBy: data.addedBy,
+            collectionId: data.collectionId,
+            created: data.created,
+            modified: data.modified
+        };
+        
+        Collection.app.models.comment.create(comment, function (err, newCommentInstance) {
+            if (err) {
+                cb(err);
+            }
+            else {
+                /*
+                 NEW: Collection -[hasComment]-> Comment
+                 */
+                Collection.dataSource.connector.execute(
+                    "MATCH (c:collection {id: '" + id + "'}),(t:comment {id: '" + newCommentInstance.id + "'}) MERGE (c)-[r:hasComment]->(t) RETURN t",
+                    function (err, results) {
+                        if (err) {
+                            cb(err);
+                        }
+                        else {
+                            cb(null, results);
+                        }
+                    }
+                );
+            }
+        });
+    };
+
+    Collection.editComment = function (data, collectionId, commentId, cb) {
+        
+        console.log("Editing the comment : " + commentId);
+        
+        Collection.app.models.collection.findById(collectionId, function (err, collectionInstance) {
+            
+            if (err) {
+                cb(err);
+            } else if (collectionInstance != null) {
+
+                Collection.app.models.comment.findById(commentId, function (err, commentInstance) {
+                    if (err) {
+                        cb(err);
+                    }
+                    else if (commentInstance != null) {
+
+                        var editedComment = {
+                            description: data.description,
+                            addedBy: data.addedBy,
+                            collectionId: data.collectionId,
+                            created: data.created,
+                            modified: data.modified
+                        };
+                        
+                        Collection.app.models.comment.upsertWithWhere({ "id": commentId }, editedComment, function (err, editedCommentInstance) {
+                            if (err) {
+                                cb(err);
+                            }
+                            else {
+                                console.log("Comment updated : " + editedCommentInstance.id);
+                                cb(null, editedCommentInstance);
+                            }
+                        });
+                    } else {
+                        var err = new Error('Comment Not Found');
+                        err.status = 404;
+                        cb(err);
+                    }
+                });
+            } else {
+                var err = new Error('Collection Not Found');
+                err.status = 404;
+                cb(err);
+            }
+        });
+    };
+
+     Collection.patchExistingComment = function (data, collectionId, commentId, cb) {
+        
+        console.log("Linking existing comment " + commentId + " to collection "+collectionId);
+
+        Collection.app.models.comment.findById(commentId, function (err, commentInstance) {
+            
+            if (err) {
+                cb(err);
+            } else {
+                /*
+                 NEW: Collection -[hasComment]-> Comment
+                 */
+                Collection.dataSource.connector.execute(
+                    "MATCH (c:collection {id: '" + collectionId + "'}),(t:comment {id: '" + commentInstance.id + "'}) MERGE (c)-[r:hasComment]->(t) RETURN t",
+                    function (err, results) {
+                        
+                        if (err) {
+                            cb(err);
+                        } else {
+                            cb(null, results);
+                        }
+                    }
+                );
+            }
+        });
+    };
+
+    Collection.deleteComment = function (collectionId, commentId, cb) {
+        
+        console.log("Deleting comment instance " + commentId);
+        Collection.app.models.collection.findById(collectionId, function (err, collectionInstance) {
+            
+            if (err) {
+                cb(err);
+            } else if (collectionInstance != null) {
+               
+                Collection.app.models.comment.findById(commentId, function (err, commentInstance) {
+                    if (err) {
+                        cb(err);
+                    } else if (commentInstance != null) {
+
+                        console.log("Deleting comment :" + commentInstance.id);
+                        /*
+                         NEW: Collection -[hasParticipant]-> Peer
+                         */
+                        Collection.dataSource.connector.execute(
+                            "MATCH (a:collection{id:'" + collectionId + "'})-[r:hasComment]->(b:comment{id:'" + commentInstance.id + "'}) detach delete b",
+                            function (err, results) {
+                                if (err) {
+                                    cb(err);
+                                } else {
+                                    cb(null, results);
+                                }
+                            }
+                        );
+                    } else {
+                        var err = new Error('Comment Not Found');
+                        err.status = 404;
+                        cb(err);
+                    }
+                });
+            } else {
+                var err = new Error('Collection Not Found');
+                err.status = 404;
+                cb(err);
+            }
+        });
+    };
+
+
+
+    // TODO: Define remote methods for participants, contents, topics, billing, comments etc
 
     Collection.remoteMethod(
         'addNewContents',
@@ -532,5 +685,60 @@ module.exports = function (Collection) {
         }
     );
 
+    /**
+     * Comment Remote method section - starts here
+     */
+    Collection.remoteMethod(
+        'addNewComment',
+        {
+            description: 'Add a new comment instance to this collection',
+            accepts: [
+                { arg: 'data', type: "comment", http: { source: 'body' }, required: true },
+                { arg: 'id', type: 'string', http: { source: 'path' } }
+            ],
+            returns: { arg: 'contentObject', type: 'object', root: true },
+            http: { verb: 'post', path: '/:id/comments' }
+        }
+    );
 
+    Collection.remoteMethod(
+        'editComment',
+        {
+            description: 'Edit existing comment of this collection',
+            accepts: [
+                { arg: 'data', type: 'comment', http: { source: 'body' }, required: true },
+                { arg: 'id', type: 'string', description: 'collection id', http: { source: 'path' }, required: true },
+                { arg: 'fk', type: 'string', description: 'foreign key for comments', http: { source: 'path' }, required: true }
+            ],
+            returns: { arg: 'contentObject', type: 'object', root: true },
+            http: { verb: 'put', path: '/:id/comments/:fk' }
+        }
+    );
+
+    Collection.remoteMethod(
+        'patchExistingComment',
+        {
+            description: 'Link an existing comment instance to this collection',
+            accepts: [
+                { arg: 'data', type: 'comment', http: { source: 'body' }, required: true },
+                { arg: 'id', type: 'string', description: 'collection id', http: { source: 'path' } },
+                { arg: 'fk', type: 'string', description: 'foreign key for comments', http: { source: 'path' }, required: true }
+            ],
+            returns: { arg: 'contentObject', type: 'object', root: true },
+            http: { verb: 'patch', path: '/:id/comments/:fk' }
+        }
+    );
+
+     Collection.remoteMethod(
+        'deleteComment',
+        {
+            description: 'Delete a comment instance from this collection',
+            accepts: [
+                { arg: 'id', type: 'string', description: 'collection id', http: { source: 'path' }, required: true },
+                { arg: 'fk', type: 'string', description: 'foreign key for comments', http: { source: 'path' }, required: true }
+            ],
+            returns: { arg: 'contentObject', type: 'object', root: true },
+            http: { verb: 'delete', path: '/:id/comments/:fk' }
+        }
+    );
 };
